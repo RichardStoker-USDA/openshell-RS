@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1.4
 # Supervisor container for navigator
 # Multi-stage build for smaller final image
 
 # Stage 1: Rust builder
 FROM rust:1.85-slim AS rust-builder
+ARG RUST_BUILD_PROFILE=debug
 
 # Install build dependencies for protobuf-src
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +17,15 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY proto/ proto/
-RUN cargo build --release --package navigator-sandbox
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    if [ "$RUST_BUILD_PROFILE" = "release" ]; then \
+        cargo build --release --package navigator-sandbox; \
+    else \
+        cargo build --package navigator-sandbox; \
+    fi && \
+    mkdir -p /build/out && \
+    cp /build/target/${RUST_BUILD_PROFILE}/navigator-sandbox /build/out/
 
 # Stage 2: Python base
 FROM python:3.12-slim AS base
@@ -44,13 +54,14 @@ RUN uv venv /app/.venv && \
 
 # Stage 4: Final image
 FROM base AS final
+ARG RUST_BUILD_PROFILE=debug
 
 # Copy Python virtual environment and uv
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # Copy navigator-sandbox binary from Rust builder
-COPY --from=rust-builder /build/target/release/navigator-sandbox /usr/local/bin/
+COPY --from=rust-builder /build/out/navigator-sandbox /usr/local/bin/
 
 # Add venv to PATH
 ENV PATH="/app/.venv/bin:$PATH"

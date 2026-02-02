@@ -117,7 +117,7 @@ run = "cargo run -p navigator-cli --"
 
 [tasks.sandbox]
 description = "Run the sandbox container with an interactive shell"
-depends = ["docker:build:factory"]
+depends = ["//docker:build:factory"]
 run = "docker run -it navigator-factory -i /bin/bash"
 
 # ============================================================================
